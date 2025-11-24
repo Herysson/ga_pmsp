@@ -14,7 +14,7 @@ REM A variável especial %~dp0 garante que os caminhos sempre funcionem,
 REM não importa de onde o script seja executado.
 set "ROOT_FOLDER=%~dp0"
 set "INSTANCIAS_FOLDER=%ROOT_FOLDER%instancias"
-set "SOLVER_SCRIPT=%ROOT_FOLDER%ga_pmsp3.py"
+set "SOLVER_SCRIPT=%ROOT_FOLDER%ga_pmsp.py"
 set "RESULTS_FILE=%ROOT_FOLDER%resultados_GA.txt"
 
 REM --- Verificações Iniciais ---

@@ -2,6 +2,8 @@ import json
 import random
 import time
 import argparse
+import os
+import csv
 from typing import List, Tuple, Dict, Any
 
 
@@ -249,21 +251,10 @@ def genetic_algorithm(n_jobs: int,
 # -------------------------------------------------------
 
 def calcular_ddlb(config, processing_times, setup_matrix, ready_times):
-    """
-    Calcula o Data Dependent Lower Bound (DDLB) corrigido.
-
-    Ideia:
-    - Para cada job i, δ_i = menor setup saindo de i para qualquer j != i.
-    - Em qualquer agenda com m máquinas, n_jobs - m jobs pagarão setup de saída.
-    - O setup total mínimo é: sum(δ_i) - soma dos m maiores δ_i.
-    - Limite de carga = (sum p_i + setup_total_min) / m
-    - Limite de caminho crítico = max_i (r_i + p_i + δ_i)
-    - DDLB = max(limite_carga_trabalho, limite_caminho_critico)
-    """
     n_jobs = config['n_jobs']
     n_machines = config['n_maquinas']
 
-    # 1) Calcula δ_i = menor setup saindo de i
+    # 1) δ_i = menor setup saindo de i
     deltas = []
     for i in range(n_jobs):
         min_setup_i = min(
@@ -273,26 +264,78 @@ def calcular_ddlb(config, processing_times, setup_matrix, ready_times):
         )
         deltas.append(min_setup_i)
 
-    # 2) Soma dos tempos de processamento e dos δ_i
+    # 2) soma dos p_i e δ_i
     soma_p = sum(processing_times)
     soma_deltas = sum(deltas)
 
-    # 3) Setup total mínimo: tira os m maiores δ_i
+    # 3) setup total mínimo (tirando os m maiores δ_i, que podem ser "não pagos"
+    #    pelos últimos jobs de cada máquina)
     deltas_ordenados = sorted(deltas, reverse=True)
     soma_maiores = sum(deltas_ordenados[:n_machines])
     setup_total_minimo = soma_deltas - soma_maiores
 
     limite_carga_trabalho = (soma_p + setup_total_minimo) / n_machines
 
-    # 4) Limite de caminho crítico
+    # 4) Limite de caminho crítico *sem* δ_i
     limite_caminho_critico = 0.0
     for i in range(n_jobs):
-        caminho_i = ready_times[i] + processing_times[i] + deltas[i]
+        caminho_i = ready_times[i] + processing_times[i]  # <-- SEM deltas aqui
         if caminho_i > limite_caminho_critico:
             limite_caminho_critico = caminho_i
 
     ddlb = max(limite_carga_trabalho, limite_caminho_critico)
     return ddlb
+
+
+# -------------------------------------------------------
+# 5. Salva resultado em um csv
+# -------------------------------------------------------
+
+def format_decimal(valor: float, casas: int = 2) -> str:
+            """
+            Formata um número com 'casas' decimais usando vírgula como separador.
+            Ex: 1234.567 -> "1234,57"
+            """
+            return f"{valor:.{casas}f}".replace('.', ',')
+
+def salvar_resultado_csv(
+    csv_file: str,
+    scenario_code: str,
+    instance_path: str,
+    ms_final: float,
+    ddlb: float,
+    razao_ms_ddlb: float,
+    melhoria_ms: float,
+    q_iteracoes: int,
+    tempo_ga_ms: float,
+):
+    file_exists = os.path.isfile(csv_file)
+
+    with open(csv_file, mode="a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, delimiter=';')  # ; como separador de campos (padrão PT-BR)
+
+        if not file_exists:
+            writer.writerow([
+                "cenario",
+                "arquivo_instancia",
+                "makespan_final",
+                "ddlb",
+                "razao_ms_ddlb",
+                "melhoria_ms",
+                "iteracoes",
+                "tempo_ga_ms",
+            ])
+
+        writer.writerow([
+            scenario_code,
+            instance_path,
+            format_decimal(ms_final, 2),
+            format_decimal(ddlb, 2),
+            format_decimal(razao_ms_ddlb, 4),
+            format_decimal(melhoria_ms, 2),
+            q_iteracoes,
+            format_decimal(tempo_ga_ms, 2),
+        ])
 
 
 # -------------------------------------------------------
@@ -389,6 +432,18 @@ def run_scenario_from_file(file_path: str):
     print(f"Quantidade de iterações (gerações) realizadas: {q_iteracoes}")
     print(f"Tempo de execução do GA: {tempo_ga*1000:.2f} ms")
     print("\n")
+
+    salvar_resultado_csv(
+        csv_file="ga_pmsp.csv",
+        scenario_code=scenario_code,
+        instance_path=file_path,
+        ms_final=ms_final,
+        ddlb=ddlb,
+        razao_ms_ddlb=razao_ms_ddlb,
+        melhoria_ms=melhoria_ms,
+        q_iteracoes=q_iteracoes,
+        tempo_ga_ms=tempo_ga*1000.0,
+    )
 
 
 if __name__ == "__main__":
